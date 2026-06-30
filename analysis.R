@@ -101,13 +101,20 @@ ordered_by_absolute <- model_comparison[order(model_comparison$absolute_revision
 # compute cumulative means:
 ordered_by_absolute$mean_delta_wis <- cumsum(ordered_by_absolute$delta_wis)/seq_along(ordered_by_absolute$delta_wis)
 # only keep last entry for each value of absolute_revision:
-ordered_by_absolute <- aggregate(mean_delta_wis ~ absolute_revision, data = ordered_by_absolute, FUN = tail, 1)
+ordered_by_absolute_to_plot <- aggregate(mean_delta_wis ~ absolute_revision, data = ordered_by_absolute, FUN = tail, 1)
 
 # plot:
-plot(ordered_by_absolute$absolute_revision, ordered_by_absolute$mean_delta_wis,
-     xlab = "maximum accepted absolute revision of last data point",
-     ylab = "advantage of Google in mean WIS", type = "s")
+par(mfrow = c(2, 1), mar = c(4, 4, 1, 1), cex = 0.7)
+layout(matrix(1:2, ncol = 1), heights = c(2, 1))
 
+plot(ordered_by_absolute_to_plot$absolute_revision, ordered_by_absolute_to_plot$mean_delta_wis,
+     xlab = "maximum accepted absolute revision of last data point",
+     ylab = "mean WIS advantage of Google", type = "s", col = "cornflowerblue")
+
+
+hist(model_comparison$absolute_revision, breaks = 5*0:130,
+     xlab = "absolute revision of last data point", ylab = "frequency",
+     main = "", col  ="cornflowerblue", border = "cornflowerblue")
 
 # same for relative changes: order
 ordered_by_relative <- model_comparison[order(model_comparison$relative_revision), c("relative_revision", "delta_wis")]
@@ -121,19 +128,100 @@ ordered_by_relative$mean_delta_wis <- cumsum(ordered_by_relative$delta_wis)/seq_
 # ordered_by_relative$upper_delta_wis <- ordered_by_relative$mean_delta_wis + qnorm(0.05)*ordered_by_relative$se_delta_wis
 
 # only keep last entry for each value of absolute_revision:
-ordered_by_relative <- aggregate(mean_delta_wis ~ relative_revision, data = ordered_by_relative, FUN = tail, 1)
+ordered_by_relative_to_plot <- aggregate(mean_delta_wis ~ relative_revision, data = ordered_by_relative, FUN = tail, 1)
 
 # plot
-plot(ordered_by_relative$relative_revision, ordered_by_relative$mean_delta_wis,
-     xlab = "maximum accepted log revision of last data point",
-     ylab = "advantage of Google in mean WIS", type = "s")
+par(mfrow = c(2, 1), mar = c(4, 4, 1, 1), cex = 0.7)
+layout(matrix(1:2, ncol = 1), heights = c(2, 1))
 
+plot(ordered_by_relative_to_plot$relative_revision, ordered_by_relative_to_plot$mean_delta_wis,
+     xlab = "maximum accepted log revision of last data point",
+     ylab = "advantage of Google in mean WIS", type = "s",
+     col = "cornflowerblue")
+
+hist(model_comparison$relative_revision, breaks = 0:175/50,
+     xlab = "log revision of last data point", ylab = "frequency",
+     main = "", col  ="cornflowerblue", border = "cornflowerblue")
 
 # plot with a square-root scale on the x-axis to see more
-plot(sqrt(ordered_by_relative$relative_revision), ordered_by_relative$mean_delta_wis,
+plot(sqrt(ordered_by_relative_to_plot$relative_revision), ordered_by_relative_to_plot$mean_delta_wis,
      xlab = "maximum accepted log revision of last data point",
-     ylab = "advantage of Google in mean WIS", type = "s", axes = FALSE)
+     ylab = "advantage of Google in mean WIS", type = "s", axes = FALSE, col = "cornflowerblue")
 xdash <- c(0, 0.1, 0.25, 0.5, 1, 2.5, 5)
 axis(1, at = sqrt(xdash), labels = xdash)
 axis(2)
+box()
+
+
+# plot extreme cases:
+# select the most extreme revisions:
+extreme_revisions <- subset(data_revisions, absolute_revision >= 155 & state != "US")
+nrow(extreme_revisions)
+
+pdf("figures/extreme_cases.pdf", width = 9, height = 9)
+par(mfrow = c(3, 3))
+cex <- 0.7
+
+# plot each:
+for (i in 1:nrow(extreme_revisions)) {
+  # i <- 5
+  st <- extreme_revisions$state[i]
+  da <- extreme_revisions$date[i]
+  
+  forecast_cdc <- subset(submissions, state == st & reference_date == da & 
+                           model == "CovidHub-ensemble")
+  forecast_cdc <- forecast_cdc[order(forecast_cdc$target_end_date), ]
+  
+  forecast_google <- subset(submissions, state == st & reference_date == da &
+                              model == "Google Retrospective (TS)")[1:4, ] # just one replica
+                              
+  forecast_google <- forecast_google[order(forecast_google$target_end_date), ]
+  
+  snapshot_to_plot <- subset(snapshots[[as.character(extreme_revisions$date[i] -3)]],
+                             state == st)
+  data_final_to_plot <- subset(final_data,
+                               state == st)
+  
+  last_date <- da - 7
+  last_value_snapshot <- tail(snapshot_to_plot$value, 1)
+  last_value_final <- subset(data_final_to_plot, date == max(snapshot_to_plot$date))$value
+  
+  par(mar = c(3, 4, 3, 1))
+  yl <- c(0, 1.5*max(data_final_to_plot$value))
+  plot(data_final_to_plot$date, data_final_to_plot$value, type = "l",
+       xlab = "", ylab = "hospitalizations",
+       main = paste0(st, ", ", da), ylim = yl)
+  lines(snapshot_to_plot$date, snapshot_to_plot$value, col = "royalblue3", lty = "dashed")
+  abline(v = last_date, col = "grey", lty = 1)
+  
+  points(snapshot_to_plot$date, snapshot_to_plot$value, pch = 16, cex = cex, col = "royalblue3")
+  points(data_final_to_plot$date, data_final_to_plot$value, pch = 16, cex = cex)
+  
+  polygon(c(last_date, forecast_cdc$target_end_date,
+            rev(forecast_cdc$target_end_date), last_date),
+          c(last_value_snapshot, forecast_cdc$quantile_0.1,
+            rev(forecast_cdc$quantile_0.9), last_value_snapshot),
+          col = rgb(0.27, 0.51, 0.7, 0.3), border = NA
+  )
+  lines(c(last_date, forecast_cdc$date), c(last_value_snapshot, forecast_cdc$quantile_0.5), col = "steelblue2", lty = 2)
+  points(forecast_cdc$target_end_date, forecast_cdc$quantile_0.5, col = "steelblue2", pch = 1, cex = cex)
+  
+  polygon(c(last_date, forecast_google$target_end_date,
+            rev(forecast_google$target_end_date), last_date),
+          c(last_value_final, forecast_google$quantile_0.1,
+            rev(forecast_google$quantile_0.9), last_value_final),
+          col = rgb(0.5, 0.5, 0.5, 0.3), border = NA
+  )
+  lines(c(last_date, forecast_google$date), c(last_value_final, forecast_google$quantile_0.5), col = "darkgrey", lty = 2)
+  points(forecast_google$target_end_date, forecast_google$quantile_0.5, col = "darkgrey", pch = 1, cex = cex)
+  
+  # add legend in first panel
+  if(i == 1){
+    legend("topright", legend = c( "Data:", "real-time", "consolidated",
+                                  "Predictions:", "CDC ensemble", "Google Retrospective"),
+           col = c(NA, "royalblue3", "black", NA, "steelblue2", "darkgrey"),
+                   pch = c(NA, 16, 16, NA, 1, 1), lty = c(NA, 1, 2, NA, 1, 2), bty = "n")
+  }
+}
+dev.off()
 
