@@ -36,10 +36,14 @@ cdc <- cdc[, colnames(google_mean)]
 (google_mean_by_date <- aggregate(wis ~ reference_date, data = google_mean, FUN = mean))
 (cdc_by_date <- aggregate(wis ~ reference_date, data = cdc, FUN = mean))
 
+# compute overall means:
+mean(google_mean$wis)
+mean(cdc$wis)
+
 # merge into one (wide):
 model_comparison <- merge(google_mean, cdc, by = c("reference_date", "state", "target_end_date", "horizon"), suffixes = c(".google", ".cdc"))
 
-# compute difference in CRPS
+# compute difference in WIS
 model_comparison$delta_wis <- model_comparison$wis.cdc - model_comparison$wis.google
 
 # now obtain time series of initially reported values
@@ -104,49 +108,49 @@ ordered_by_absolute$mean_delta_wis <- cumsum(ordered_by_absolute$delta_wis)/seq_
 ordered_by_absolute_to_plot <- aggregate(mean_delta_wis ~ absolute_revision, data = ordered_by_absolute, FUN = tail, 1)
 
 # plot:
-par(mfrow = c(2, 1), mar = c(4, 4, 1, 1), cex = 0.7)
+pdf("figures/comparison_absolute_revisions.pdf", width = 6, height = 5)
+par(mfrow = c(2, 1), mar = c(4, 4, 1, 1), cex = 0.7, las = 1)
 layout(matrix(1:2, ncol = 1), heights = c(2, 1))
 
 plot(ordered_by_absolute_to_plot$absolute_revision, ordered_by_absolute_to_plot$mean_delta_wis,
-     xlab = "maximum accepted absolute revision of last data point",
-     ylab = "mean WIS advantage of Google", type = "s", col = "cornflowerblue")
+     xlab = expression(maximum~accepted~absolute~revision~Delta~of~last~data~point),
+     ylab = "mean WIS advantage of Google", type = "s", col = "steelblue2", xlim = c(0, 620))
+abline(h = 0, lty = 2, col = "grey")
 
 
 hist(model_comparison$absolute_revision, breaks = 5*0:130,
      xlab = "absolute revision of last data point", ylab = "frequency",
-     main = "", col  ="cornflowerblue", border = "cornflowerblue")
+     main = "", col  ="steelblue2", border = "steelblue2", xlim =c(0, 620))
+
+dev.off()
 
 # same for relative changes: order
 ordered_by_relative <- model_comparison[order(model_comparison$relative_revision), c("relative_revision", "delta_wis")]
 # compute cumulative means:
 ordered_by_relative$mean_delta_wis <- cumsum(ordered_by_relative$delta_wis)/seq_along(ordered_by_relative$delta_wis)
-# tried to compute standard errors but normality assumption is too strongly violated
-# ordered_by_relative$mean_delta_wis_squared <- cumsum(ordered_by_relative$delta_wis^2)/seq_along(ordered_by_relative$delta_wis)
-# ordered_by_relative$var_delta_wis <- ordered_by_relative$mean_delta_wis_squared - ordered_by_relative$mean_delta_wis^2
-# ordered_by_relative$se_delta_wis <- ordered_by_relative$var_delta_wis/sqrt(seq_along(ordered_by_relative$var_delta_wis))
-# ordered_by_relative$lower_delta_wis <- ordered_by_relative$mean_delta_wis - qnorm(0.05)*ordered_by_relative$se_delta_wis
-# ordered_by_relative$upper_delta_wis <- ordered_by_relative$mean_delta_wis + qnorm(0.05)*ordered_by_relative$se_delta_wis
 
 # only keep last entry for each value of absolute_revision:
 ordered_by_relative_to_plot <- aggregate(mean_delta_wis ~ relative_revision, data = ordered_by_relative, FUN = tail, 1)
 
 # plot
-par(mfrow = c(2, 1), mar = c(4, 4, 1, 1), cex = 0.7)
+pdf("figures/comparison_relative_revisions.pdf", width = 6, height = 5)
+par(mfrow = c(2, 1), mar = c(4, 4, 1, 1), cex = 0.7, las = 1)
 layout(matrix(1:2, ncol = 1), heights = c(2, 1))
 
 plot(ordered_by_relative_to_plot$relative_revision, ordered_by_relative_to_plot$mean_delta_wis,
      xlab = "maximum accepted log revision of last data point",
      ylab = "advantage of Google in mean WIS", type = "s",
-     col = "cornflowerblue")
+     col = "steelblue2")
 
 hist(model_comparison$relative_revision, breaks = 0:175/50,
      xlab = "log revision of last data point", ylab = "frequency",
-     main = "", col  ="cornflowerblue", border = "cornflowerblue")
+     main = "", col  ="steelblue2", border = "steelblue2")
+dev.off()
 
 # plot with a square-root scale on the x-axis to see more
 plot(sqrt(ordered_by_relative_to_plot$relative_revision), ordered_by_relative_to_plot$mean_delta_wis,
      xlab = "maximum accepted log revision of last data point",
-     ylab = "advantage of Google in mean WIS", type = "s", axes = FALSE, col = "cornflowerblue")
+     ylab = "advantage of Google in mean WIS", type = "s", axes = FALSE, col = "steelblue2")
 xdash <- c(0, 0.1, 0.25, 0.5, 1, 2.5, 5)
 axis(1, at = sqrt(xdash), labels = xdash)
 axis(2)
@@ -159,8 +163,12 @@ extreme_revisions <- subset(data_revisions, absolute_revision >= 155 & state != 
 nrow(extreme_revisions)
 
 pdf("figures/extreme_cases.pdf", width = 9, height = 9)
-par(mfrow = c(3, 3))
+par(mfrow = c(3, 3), las = 1)
 cex <- 0.7
+
+
+# a vector to store WIS differences (needed below):
+wis_differences_extremes <- numeric(nrow(extreme_revisions))
 
 # plot each:
 for (i in 1:nrow(extreme_revisions)) {
@@ -177,6 +185,11 @@ for (i in 1:nrow(extreme_revisions)) {
                               
   forecast_google <- forecast_google[order(forecast_google$target_end_date), ]
   
+  mean_wis_cdc <- mean(forecast_cdc$wis)
+  mean_wis_google <- mean(forecast_google$wis)
+  
+  wis_differences_extremes[i] <- sum(forecast_cdc$wis) - sum(forecast_google$wis)
+  
   snapshot_to_plot <- subset(snapshots[[as.character(extreme_revisions$date[i] -3)]],
                              state == st)
   data_final_to_plot <- subset(final_data,
@@ -191,7 +204,7 @@ for (i in 1:nrow(extreme_revisions)) {
   plot(data_final_to_plot$date, data_final_to_plot$value, type = "l",
        xlab = "", ylab = "hospitalizations",
        main = paste0(st, ", ", da), ylim = yl)
-  lines(snapshot_to_plot$date, snapshot_to_plot$value, col = "royalblue3", lty = "dashed")
+  lines(snapshot_to_plot$date, snapshot_to_plot$value, col = "steelblue4", lty = "dashed")
   abline(v = last_date, col = "grey", lty = 1)
   
   points(snapshot_to_plot$date, snapshot_to_plot$value, pch = 16, cex = cex, col = "royalblue3")
@@ -219,9 +232,17 @@ for (i in 1:nrow(extreme_revisions)) {
   if(i == 1){
     legend("topright", legend = c( "Data:", "real-time", "consolidated",
                                   "Predictions:", "CDC ensemble", "Google Retrospective"),
-           col = c(NA, "royalblue3", "black", NA, "steelblue2", "darkgrey"),
-                   pch = c(NA, 16, 16, NA, 1, 1), lty = c(NA, 1, 2, NA, 1, 2), bty = "n")
+           col = c(NA, "steelblue4", "black", NA, "steelblue2", "darkgrey"),
+                   pch = c(NA, 16, 16, NA, 1, 1), lty = c(NA, 2, 1, NA, 2, 1), bty = "n")
   }
+  
+  legend("bottomleft", legend = c(paste0("Mean WIS values:    ", 
+                              paste0("CDC: ", round(mean_wis_cdc)), 
+                              paste0("     Google: ", round(mean_wis_google)))), bty = "n", 
+         cex = 0.9)
 }
 dev.off()
 
+# figure out their contribution to overall WIS difference:
+sum(wis_differences_extremes) / (sum(cdc$wis) - sum(google_mean$wis))
+mean(wis_differences_extremes)
