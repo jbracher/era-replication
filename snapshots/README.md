@@ -1,0 +1,1 @@
+These files were extracted from the [commit history](https://github.com/CDCgov/covid19-forecast-hub/commits/main/target-data/covid-hospital-admissions.csv) of the [CDC covid19-forecast-hub repository](https://github.com/CDCgov/covid19-forecast-hub). They have been made available under an Apache-2.0 license. Out only adaptation consists in re-naming the files.
